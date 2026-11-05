@@ -1,0 +1,72 @@
+# The Village — world, endpoints, pacing
+endpoints:
+  tier1: http://127.0.0.1:8081   # Qwen3-14B (RTX 3060) — main cast + narrator
+  tier2: http://127.0.0.1:8082   # Qwen3-8B  (RTX 3080) — supporting cast
+  tier3: http://127.0.0.1:8083   # Qwen3-4B  (RTX 3070) — impulses, sentiment
+  embed: http://127.0.0.1:8084   # Qwen3-Embedding-0.6B
+
+pacing:
+  tick_minutes: 30
+  day_start: "06:00"
+  day_end: "23:00"
+  max_convos_per_tick: 2
+  convo_turns: 4
+  convo_chance_base: 0.55
+  impulse_chance: 0.08
+  gossip_chance: 0.35
+
+world:
+  coords:
+    Maple Square: [600, 400]
+    The Roasted Bean: [440, 310]
+    "Rose's Bakery": [300, 210]
+    The Library: [520, 140]
+    Schoolhouse: [700, 110]
+    The Clinic: [840, 210]
+    Market Row: [820, 430]
+    Ferrell Workshop: [980, 330]
+    Lakeside Pier: [1060, 180]
+    Riverside: [930, 600]
+    Cottage Row: [430, 590]
+    Old Church: [250, 470]
+  locations:
+    Maple Square: "the town square with a big maple tree and a fountain"
+    The Roasted Bean: "the cozy village cafe, always smells of cinnamon"
+    Ferrell Workshop: "a loud metal-and-wood workshop, sparks everywhere"
+    Market Row: "a row of market stalls, loud and colorful"
+    Lakeside Pier: "a quiet wooden pier on Mirror Lake"
+    The Library: "a hushed old library with tall shelves"
+    The Clinic: "a small clean clinic with a green cross"
+    Rose's Bakery: "a warm bakery, windows fogged from the ovens"
+    Schoolhouse: "a small schoolhouse with a crooked bell"
+    Old Church: "an old stone church with a leaning steeple"
+    Riverside: "reeds and muddy banks along the Willow River"
+    Cottage Row: "a lane of crooked cottages where everyone lives"
+  edges:
+    - [Maple Square, The Roasted Bean]
+    - [Maple Square, Market Row]
+    - [Maple Square, The Library]
+    - [Maple Square, Old Church]
+    - [Maple Square, Cottage Row]
+    - [The Roasted Bean, Rose's Bakery]
+    - [Rose's Bakery, Market Row]
+    - [Market Row, Ferrell Workshop]
+    - [Ferrell Workshop, Lakeside Pier]
+    - [Lakeside Pier, Riverside]
+    - [Riverside, Cottage Row]
+    - [The Library, Schoolhouse]
+    - [Schoolhouse, The Clinic]
+    - [The Clinic, Maple Square]
+    - [Old Church, Riverside]
+
+events:
+  - "a thick fog rolled in from the river"
+  - "someone left an anonymous note on the fountain in Maple Square"
+  - "the bell at the Schoolhouse rang by itself at noon"
+  - "a cart of cabbages overturned on Market Row"
+  - "lights were seen moving over Lakeside Pier after dark"
+  - "Rose's Bakery gave away free bread 'for luck', which everyone found suspicious"
+  - "the bridge plank at Riverside broke, nearly sending someone into the water"
+  - "a traveling peddler arrived with strange glass trinkets"
+  - "Mayor Holloway was seen arguing quietly with Silas Marsh"
+  - "a dog nobody recognizes followed Kip around all day"

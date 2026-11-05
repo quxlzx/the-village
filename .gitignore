@@ -1,0 +1,7 @@
+.webhook*
+.village_channel
+state/
+models/
+.venv/
+__pycache__/
+*.pyc

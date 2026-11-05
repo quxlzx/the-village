@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Village — Live</title>
+<style>
+  :root { --bg:#10141c; --panel:#171d29; --ink:#e8e6df; --dim:#8b93a5; --acc:#f0c95c; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); font-family:'Segoe UI',system-ui,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  header { display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--panel); border-bottom:1px solid #232b3b; }
+  header h1 { font-size:17px; letter-spacing:2px; color:var(--acc); font-weight:600; }
+  #clock { font-size:15px; color:var(--ink); font-variant-numeric:tabular-nums; }
+  #day { color:var(--dim); font-size:13px; }
+  #live { margin-left:auto; font-size:12px; letter-spacing:1px; color:var(--dim); display:flex; align-items:center; gap:6px; }
+  #live .dot { width:9px; height:9px; border-radius:50%; background:#444; }
+  #live.on .dot { background:#3ddc84; animation:pulse 1.6s infinite; } #live.on { color:#3ddc84; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  main { flex:1; display:flex; min-height:0; }
+  #mapwrap { flex:1.6; position:relative; min-width:0; }
+  canvas { width:100%; height:100%; display:block; cursor:crosshair; }
+  #feed { flex:1; min-width:320px; max-width:460px; background:var(--panel); border-left:1px solid #232b3b; overflow-y:auto; padding:12px 14px; font-size:13.5px; line-height:1.45; }
+  .post { margin-bottom:12px; padding:9px 11px; border-radius:9px; background:#1d2534; border-left:3px solid #33405a; white-space:pre-wrap; word-break:break-word; }
+  .post.narr { border-left-color:var(--acc); color:#e9d9a8; font-style:italic; }
+  .post.evt  { border-left-color:#e74c3c; background:#2a1d22; }
+  .post.dig  { border-left-color:#3498db; }
+  .post.dayb { border-left-color:#9b59b6; color:#cbb8e8; }
+  #card { position:absolute; left:14px; bottom:14px; width:300px; background:rgba(20,26,38,.95); border:1px solid #2c3752; border-radius:12px; padding:13px 15px; display:none; font-size:13px; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  #card h3 { font-size:15px; margin-bottom:2px; } #card .role { color:var(--acc); font-size:12px; margin-bottom:7px; }
+  #card .pers { color:var(--dim); margin-bottom:8px; } #card .act { margin-bottom:8px; }
+  #card .aff span { display:inline-block; margin:2px 4px 2px 0; padding:2px 7px; border-radius:10px; font-size:11.5px; background:#232c40; }
+  #card .close { position:absolute; right:10px; top:8px; cursor:pointer; color:var(--dim); }
+  #hint { position:absolute; right:12px; top:10px; color:var(--dim); font-size:11.5px; opacity:.7; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏘️ THE VILLAGE</h1>
+  <span id="day">—</span><span id="clock">--:--</span>
+  <span id="live"><span class="dot"></span>LIVE</span>
+</header>
+<main>
+  <div id="mapwrap">
+    <canvas id="cv"></canvas>
+    <div id="hint">click a villager for details</div>
+    <div id="card"><span class="close" onclick="sel=null;card.style.display='none'">✕</span>
+      <h3 id="c_name"></h3><div class="role" id="c_role"></div>
+      <div class="pers" id="c_pers"></div><div class="act" id="c_act"></div>
+      <div class="aff" id="c_aff"></div></div>
+  </div>
+  <div id="feed"></div>
+</main>
+<script>
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const ICON = {'Maple Square':'⛲','The Roasted Bean':'☕',"Rose's Bakery":'🥐','The Library':'📚',
+  'Schoolhouse':'🏫','The Clinic':'🏥','Market Row':'🛒','Ferrell Workshop':'⚒️',
+  'Lakeside Pier':'🛶','Riverside':'🌾','Cottage Row':'🏘️','Old Church':'⛪'};
+let state=null, feed=[], pos={}, sel=null, W=1200, H=720;
+const card=document.getElementById('card');
+
+function fit(){ const r=cv.parentElement.getBoundingClientRect();
+  const dpr=window.devicePixelRatio||1; cv.width=r.width*dpr; cv.height=r.height*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0); }
+window.addEventListener('resize',fit); fit();
+
+async function poll(){
+  try{ const r=await fetch('/api/state'); if(r.ok) state=await r.json(); }catch(e){}
+  try{ const r=await fetch('/api/feed?limit=40'); if(r.ok) feed=(await r.json()).posts||[]; }catch(e){}
+  renderFeed();
+  if(state){
+    const fresh = (Date.now()/1000 - state.ts) < 90;
+    document.getElementById('live').className = fresh?'on':'';
+    document.getElementById('day').textContent = 'Day '+state.day;
+    document.getElementById('clock').textContent = String(state.time/60|0).padStart(2,'0')+':'+String(state.time%60).padStart(2,'0');
+    for(const a of state.agents){ if(!pos[a.name]) pos[a.name]={...state.map.locs[a.loc].xy}; }
+  }
+}
+setInterval(poll,1500); poll();
+
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function md(s){ return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>'); }
+function renderFeed(){
+  const el=document.getElementById('feed'); const n=feed.length;
+  el.innerHTML = feed.map(p=>{
+    let cls='post';
+    if(p.startsWith('🎙️')) cls+=' narr'; else if(p.startsWith('⚡')) cls+=' evt';
+    else if(p.startsWith('📰')) cls+=' dig'; else if(p.startsWith('☀️')||p.startsWith('🌙')) cls+=' dayb';
+    return `<div class="${cls}">${md(p)}</div>`; }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+function draw(ts){
+  requestAnimationFrame(draw);
+  const cw=cv.parentElement.clientWidth, ch=cv.parentElement.clientHeight;
+  const sc=Math.min(cw/W, ch/H); const ox=(cw-W*sc)/2, oy=(ch-H*sc)/2;
+  ctx.clearRect(0,0,cw,ch);
+  ctx.save(); ctx.translate(ox,oy); ctx.scale(sc,sc);
+  // grass
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#1c2b1e'); g.addColorStop(1,'#16221a');
+  ctx.fillStyle=g; ctx.fillRect(-60,-60,W+120,H+120);
+  // lake + river
+  ctx.fillStyle='#1d3a52'; ctx.beginPath(); ctx.ellipse(1090,150,120,80,0,0,7); ctx.fill();
+  ctx.strokeStyle='#1d3a52'; ctx.lineWidth=26; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(1120,230); ctx.quadraticCurveTo(1060,430,960,590);
+  ctx.quadraticCurveTo(700,700,300,660); ctx.stroke();
+  // trees
+  ctx.fillStyle='#24402a';
+  for(let i=0;i<40;i++){ const x=(i*173)%W, y=(i*97)%H;
+    if(state && Object.values(state.map.locs).some(l=>Math.hypot(l.xy[0]-x,l.xy[1]-y)<90)) continue;
+    ctx.beginPath(); ctx.arc(x,y,7+(i%3)*3,0,7); ctx.fill(); }
+  if(!state){ ctx.restore(); return; }
+  // roads
+  ctx.strokeStyle='rgba(150,128,95,.5)'; ctx.lineWidth=9; ctx.lineCap='round';
+  for(const [a,b] of state.map.edges){ const A=state.map.locs[a].xy, B=state.map.locs[b].xy;
+    ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke(); }
+  // buildings
+  ctx.textAlign='center';
+  for(const [name,L] of Object.entries(state.map.locs)){
+    const [x,y]=L.xy; ctx.fillStyle='#2b3244'; rr(x-52,y-30,104,58,10); ctx.fill();
+    ctx.strokeStyle='#3c4763'; ctx.lineWidth=1.5; rr(x-52,y-30,104,58,10); ctx.stroke();
+    ctx.font='22px serif'; ctx.fillText(ICON[name]||'🏠', x, y-2);
+    ctx.font='11px Segoe UI'; ctx.fillStyle='#aeb6c8'; ctx.fillText(name, x, y+20); }
+  // agents (lerp toward current loc)
+  const dt=1/60;
+  for(const a of state.agents){
+    const T=state.map.locs[a.loc].xy, p=pos[a.name];
+    p.x += (T[0]-p.x)*Math.min(1,dt*1.4); p.y += (T[1]-p.y)*Math.min(1,dt*1.4);
+    const jitter = (a.loc===state.map.locs[a.loc].xy[0]?0:0);
+    ctx.beginPath(); ctx.arc(p.x,p.y+14,10,0,7); ctx.fillStyle=a.color; ctx.fill();
+    ctx.strokeStyle='#0e1219'; ctx.lineWidth=2.5; ctx.stroke();
+    ctx.fillStyle='#0e1219'; ctx.font='bold 9.5px Segoe UI';
+    ctx.fillText(a.name.split(' ')[0][0], p.x, p.y+17.5);
+    ctx.fillStyle='#dfe3ea'; ctx.font='10.5px Segoe UI'; ctx.fillText(a.name.split(' ')[0], p.x, p.y+36);
+    if(a.with){ ctx.font='15px serif'; ctx.fillText('💬', p.x+13, p.y+6); }
+    if(sel===a.name){ ctx.beginPath(); ctx.arc(p.x,p.y+14,15,0,7); ctx.strokeStyle=a.color; ctx.lineWidth=2; ctx.stroke(); }
+  }
+  // night tint
+  const t=state.time;
+  if(t>=19*60 || t<6*60){ ctx.fillStyle='rgba(8,12,34,.42)'; ctx.fillRect(-60,-60,W+120,H+120); }
+  else if(t>=17*60){ ctx.fillStyle='rgba(30,20,5,.18)'; ctx.fillRect(-60,-60,W+120,H+120); }
+  ctx.restore();
+  if(sel && state){ const a=state.agents.find(x=>x.name===sel); if(a) showCard(a); }
+}
+function showCard(a){
+  card.style.display='block';
+  document.getElementById('c_name').textContent=a.name;
+  document.getElementById('c_role').textContent=a.role;
+  document.getElementById('c_pers').textContent=a.personality;
+  document.getElementById('c_act').textContent='📍 '+a.loc+' — '+a.act+(a.with?(' (talking with '+a.with+')'):'');
+  document.getElementById('c_aff').innerHTML=(a.aff||[]).map(([n,s])=>
+    `<span style="color:${s>0?'#7fd89a':'#e88'}">${n.split(' ')[0]} ${s>0?'+':''}${s}</span>`).join('');
+}
+cv.addEventListener('click', e=>{
+  if(!state) return;
+  const r=cv.getBoundingClientRect();
+  const cw=r.width, ch=r.height, sc=Math.min(cw/W,ch/H), ox=(cw-W*sc)/2, oy=(ch-H*sc)/2;
+  const mx=(e.clientX-r.left-ox)/sc, my=(e.clientY-r.top-oy)/sc;
+  let best=null, bd=28;
+  for(const a of state.agents){ const p=pos[a.name]; const d=Math.hypot(p.x-mx,p.y+14-my);
+    if(d<bd){ bd=d; best=a.name; } }
+  sel=best; if(!best) card.style.display='none'; else showCard(state.agents.find(x=>x.name===best));
+});
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
